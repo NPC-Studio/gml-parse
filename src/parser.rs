@@ -24,12 +24,37 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Option<AbstractSyntaxNode> {
+    fn next_lex(&mut self) -> Option<LexToken> {
+        while let Some(tok) = self.lexer.next() {
+            match tok {
+                LexToken::Comment(_) | LexToken::Whitespace(_) => {}
+                other => return Some(other),
+            }
+        }
+
+        None
+    }
+
+    /// This destroys the internal string, which we previously leaked.
+    ///
+    /// ## Safety
+    /// If you're holding onto **any** nodes which came from this process,
+    /// they will all be leaked.
+    pub unsafe fn clear_memory(self) {
+        // make a box out of the string...let it drop.
+        Box::from_raw(self.input as *const _ as *mut str);
+    }
+}
+
+impl Iterator for Parser {
+    type Item = AbstractSyntaxNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
         if let Some(token) = self.next_lex() {
             let output = match token {
                 LexToken::Enum => {
                     let enum_name = self
-                        .parse()
+                        .next()
                         .expect("expected IDENTIFIER")
                         .unwrap_identifier();
 
@@ -81,17 +106,6 @@ impl Parser {
 
         None
     }
-
-    fn next_lex(&mut self) -> Option<LexToken> {
-        while let Some(tok) = self.lexer.next() {
-            match tok {
-                LexToken::Comment(_) | LexToken::Whitespace(_) => {}
-                other => return Some(other),
-            }
-        }
-
-        None
-    }
 }
 
 #[cfg(test)]
@@ -100,14 +114,7 @@ mod test {
 
     /// Lexes the given input string.
     fn parse(input: &'static str) -> Vec<AbstractSyntaxNode> {
-        let mut parser = Parser::new(input.to_string());
-        let mut output = Vec::new();
-
-        while let Some(v) = parser.parse() {
-            output.push(v);
-        }
-
-        output
+        Parser::new(input.to_string()).collect()
     }
 
     #[test]

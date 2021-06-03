@@ -33,30 +33,25 @@ pub enum Comment {
     Block,
 }
 
-/// Lexes the given input string.
-pub fn lex(input: &'static str) -> Vec<LexToken> {
-    let mut lexer = Lexer {
-        input,
-        iter: input.char_indices().peekable(),
-    };
-
-    let mut output = Vec::new();
-
-    while let Some(v) = lexer.next_token() {
-        output.push(v);
-    }
-
-    output
-}
-
-struct Lexer {
+#[derive(Debug)]
+pub struct Lexer {
     input: &'static str,
     iter: Peekable<CharIndices<'static>>,
 }
 
 impl Lexer {
-    /// Generates a new LexToken...
-    pub fn next_token(&mut self) -> Option<LexToken> {
+    pub fn new(input: &'static str) -> Self {
+        Self {
+            input,
+            iter: input.char_indices().peekable(),
+        }
+    }
+}
+
+impl Iterator for Lexer {
+    type Item = LexToken;
+
+    fn next(&mut self) -> Option<Self::Item> {
         while let Some((i, c)) = self.iter.next() {
             let token = match c {
                 ' ' => LexToken::Whitespace(Whitespace::Space),
@@ -138,7 +133,9 @@ impl Lexer {
 
         None
     }
+}
 
+impl Lexer {
     /// Tries to take the next char IF it is of the requested char type. Otherwise,
     /// it does not advance the iterator
     fn try_char(&mut self, condition: char) -> bool {
@@ -146,20 +143,22 @@ impl Lexer {
     }
 
     fn try_advance(&mut self, mut condition: impl FnMut(char) -> bool) -> bool {
-        if let Some(v) = self.iter.peek() {
-            if condition(v.1) {
-                self.iter.next();
-                return true;
-            }
-        }
-
-        false
+        self.iter.next_if(|v| condition(v.1)).is_some()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    /// Lexes the given input string.
+    fn lex(input: &'static str) -> Vec<LexToken> {
+        Lexer {
+            input,
+            iter: input.char_indices().peekable(),
+        }
+        .collect()
+    }
 
     #[test]
     fn lex_control() {

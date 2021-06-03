@@ -6,8 +6,17 @@ pub enum LexToken {
     Ident(&'static str),
     Comment(Comment),
     Whitespace(Whitespace),
+    Comma,
     LeftBrace,
     RightBrace,
+}
+
+impl LexToken {
+    /// Shorthand for space for unit tests
+    #[cfg(test)]
+    pub fn space() -> Self {
+        LexToken::Whitespace(Whitespace::Space)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +62,7 @@ impl Lexer {
                 ' ' => LexToken::Whitespace(Whitespace::Space),
                 '\t' => LexToken::Whitespace(Whitespace::Tab),
                 '\n' => LexToken::Whitespace(Whitespace::Newline),
+                ',' => LexToken::Comma,
 
                 '{' => LexToken::LeftBrace,
                 '}' => LexToken::RightBrace,
@@ -81,14 +91,17 @@ impl Lexer {
                         loop {
                             if self.try_char('*') && self.try_char('/') {
                                 break;
+                            } else {
+                                // advance...
+                                if self.iter.next().is_none() {
+                                    panic!("Unexpected END_OF_FILE, expected END_OF_BLOCK_COMMENT");
+                                }
                             }
                         }
 
                         LexToken::Comment(Comment::Block)
                     } else {
-                        panic!(
-                            "Unexpected '/', not a start of COMMENT, DOC_COMMENT, or BLOCK COMMENT"
-                        );
+                        panic!("Unexpected '/', expected COMMENT, DOC_COMMENT, or BLOCK COMMENT");
                     }
                 }
 
@@ -118,6 +131,8 @@ impl Lexer {
                 unexpected => panic!("Unexpected token: {}", unexpected),
             };
 
+            println!("Found token {:?}", token);
+
             return Some(token);
         }
 
@@ -134,9 +149,8 @@ impl Lexer {
         if let Some(v) = self.iter.peek() {
             if condition(v.1) {
                 self.iter.next();
+                return true;
             }
-
-            return true;
         }
 
         false
@@ -155,7 +169,7 @@ mod test {
     #[test]
     fn lex_identifiers() {
         assert_eq!(
-            lex("hello "),
+            lex("hello there\n very nice\n\n"),
             &[
                 LexToken::Ident("hello"),
                 LexToken::Whitespace(Whitespace::Space),
@@ -167,6 +181,70 @@ mod test {
                 LexToken::Ident("nice"),
                 LexToken::Whitespace(Whitespace::Newline),
                 LexToken::Whitespace(Whitespace::Newline),
+            ]
+        );
+    }
+
+    #[test]
+    fn lex_comments() {
+        assert_eq!(
+            lex("// hey there how are you\n/* this is \n\n\na block * comment */\n/// and this is a doc comment"),
+            &[
+                LexToken::Comment(Comment::Line),
+                LexToken::Whitespace(Whitespace::Newline),
+                LexToken::Comment(Comment::Block),
+                LexToken::Whitespace(Whitespace::Newline),
+                LexToken::Comment(Comment::Doc),
+            ]
+        );
+    }
+
+    #[test]
+    fn comment_eof() {
+        assert_eq!(lex("// nicetryguy"), &[LexToken::Comment(Comment::Line),]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn bad_block() {
+        lex("/* this block will not end correctly");
+    }
+
+    #[test]
+    fn the_full_nine_yards() {
+        assert_eq!(
+            lex("\
+enum FooBar {
+    One,
+    Two,
+}"),
+            &[
+                LexToken::Enum,
+                LexToken::space(),
+                LexToken::Ident("FooBar"),
+                LexToken::space(),
+                LexToken::LeftBrace,
+                LexToken::Whitespace(Whitespace::Newline),
+                // four spaces...
+                LexToken::space(),
+                LexToken::space(),
+                LexToken::space(),
+                LexToken::space(),
+                // Word
+                LexToken::Ident("One"),
+                LexToken::Comma,
+                LexToken::Whitespace(Whitespace::Newline),
+                // four spaces...
+                LexToken::space(),
+                LexToken::space(),
+                LexToken::space(),
+                LexToken::space(),
+                // word
+                LexToken::Ident("Two"),
+                LexToken::Comma,
+                LexToken::Whitespace(Whitespace::Newline),
+                // final and out:
+                LexToken::RightBrace,
             ]
         );
     }
